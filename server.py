@@ -18,6 +18,21 @@ DB_CONFIG = {
 SET_CACHE = OrderedDict()
 MAX_CACHE_SIZE = 100
 
+def get_cached_set_json(set_id):
+    if set_id in SET_CACHE:
+        SET_CACHE.move_to_end(set_id)
+        return SET_CACHE[set_id]
+
+    json_output = get_set_json(DB, set_id)
+
+    SET_CACHE[set_id] = json_output
+    SET_CACHE.move_to_end(set_id)
+
+    if len(SET_CACHE) > MAX_CACHE_SIZE:
+        SET_CACHE.popitem(last=False)
+
+    return json_output
+
 @app.route("/")
 def index():
     template = open("templates/index.html").read()
