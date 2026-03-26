@@ -1,5 +1,6 @@
 import json
 import html
+from collections import OrderedDict
 import psycopg
 from flask import Flask, Response, request
 from time import perf_counter
@@ -14,6 +15,8 @@ DB_CONFIG = {
     "password": "bricks",
 }
 
+SET_CACHE = OrderedDict()
+MAX_CACHE_SIZE = 100
 
 @app.route("/")
 def index():
