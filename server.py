@@ -19,12 +19,12 @@ DB_CONFIG = {
 SET_CACHE = OrderedDict()
 MAX_CACHE_SIZE = 100
 
-def get_all_sets_html(databse):
+def get_all_sets_html(database):
     with open("templates/sets.html", encoding="utf-8") as f:
         template = f.read()
 
     row_parts = []
-    query = "SELECT id, name FROM leg_set ORDER BY id"
+    query = "SELECT id, name FROM lego_set ORDER BY id"
 
     for row in database.execute_and_fetch_all(query):
         html_safe_id = html.escape(row[0])
@@ -34,13 +34,13 @@ def get_all_sets_html(databse):
             f'<td>{html_safe_name}</td></tr>\n'
         )
 
-        rows = "".join(row_parts)
-        return template.replace("{ROWS}", rows)
+    rows = "".join(row_parts)
+    return template.replace("{ROWS}", rows)
     
-    def get_set_html(database, set_id):
-        with open("templates/set.html", encoding="utf-8") as f:
+def get_set_html(database, set_id):
+    with open("templates/set.html", encoding="utf-8") as f:
             template = f.read()
-        return template
+    return template
 
 def get_set_json(set_id):
     conn = psycopg.connect(**DB_CONFIG)
