@@ -20,7 +20,7 @@ DB_CONFIG = {
 SET_CACHE = OrderedDict()
 MAX_CACHE_SIZE = 100
 
-def get_all_sets_html(database):
+def get_all_sets_html(database, meta_charset):
     with open("templates/sets.html", encoding="utf-8") as f:
         template = f.read()
 
@@ -36,7 +36,7 @@ def get_all_sets_html(database):
         )
 
     rows = "".join(row_parts)
-    return template.replace("{ROWS}", rows)
+    return template.replace("{META_CHARSET}", meta_charset).replace("{ROWS}}", rows)
     
 def get_set_html(database, set_id):
     with open("templates/set.html", encoding="utf-8") as f:
@@ -118,12 +118,10 @@ def sets():
     if encoding not in ["utf-8", "utf-16"]:
         encoding = "utf-8"
     meta_charset = '<meta charset="utf-8">' if encoding == "utf-8" else ""
-    
-    database = Database(DB_CONFIG)
     html_output = get_all_sets_html(database, meta_charset)
-
     body = html_output.encode(encoding)
     compressed_body = gzip.compress(body)
+    return Response(compressed_body, content_type =f"text/html; charset={encoding}", headers={"Content-Encoding": "gzip"})
 
     with open("templates/sets.html", encoding = "utf-8") as f:
         template = f.read()
@@ -147,6 +145,7 @@ def sets():
         conn.close()
     page_html = template.replace("{ROWS}", rows)
 
+    database = Database(DB_CONFIG)
     response = Response(
         html_output, 
         content_type="text/html"
