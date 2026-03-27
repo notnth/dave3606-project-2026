@@ -43,10 +43,10 @@ def get_set_html(database, set_id):
     return template
 
 def get_set_json(database, set_id):
-    query_set = "SELECT id, name, year category FROM lego_set WHERE id = %s"
-    query_inventory = "SELECT brick_type_type_id, color_id, count FROM lego_inventory WHERE set_id = %s"
+    query_set = "SELECT id, name, year, category FROM lego_set WHERE id = %s"
+    query_inventory = "SELECT brick_type_id, color_id, count FROM lego_inventory WHERE set_id = %s"
 
-    set_rows = database.execute_and_fetch_all(query_set, (set_id, ))
+    set_rows = database.execute_and_fetch_all(query_set, (set_id,))
     if not set_rows:
         return json.dumps({"error": "Set not found"}, indent=4)
     
@@ -64,18 +64,18 @@ def get_set_json(database, set_id):
         result["inventory"].append({
             "brick_type_id": row[0],
             "color_id": row [1],
-            "category": row[2],
+            "count": row[2],
         })
 
     return json.dumps(result, indent=4)
 
 
-def get_cached_set_json(set_id):
+def get_cached_set_json(database, set_id):
     if set_id in SET_CACHE:
         SET_CACHE.move_to_end(set_id)
         return SET_CACHE[set_id]
 
-    json_output = get_set_json(set_id)
+    json_output = get_set_json(database, set_id)
 
     SET_CACHE[set_id] = json_output
     SET_CACHE.move_to_end(set_id)
@@ -87,52 +87,32 @@ def get_cached_set_json(set_id):
 
 @app.route("/")
 def index():
-    template = open("templates/index.html").read()
-    return Response(template)
+    with open("templates/index.html", encoding="utf-8") as f:
+        template = f.read()
+    return Response(template, content_type="text/html")
 
 
 @app.route("/sets")
 def sets():
-    with open("templates/sets.html", encoding="utf-8") as f:
-        template = f.read()
-        
-    row_parts = []
-
-    start_time = perf_counter()
-    conn = psycopg.connect(**DB_CONFIG)
-    try:
-        with conn.cursor() as cur:
-            cur.execute("select id, name from lego_set order by id")
-            for row in cur.fetchall():
-                html_safe_id = html.escape(row[0])
-                html_safe_name = html.escape(row[1])
-                
-                row_parts.append(
-                    f'<tr><td><a href="/set?id={html_safe_id}">{html_safe_id}</a></td>'
-                    f'<td>{html_safe_name}</td></tr>\n'
-                )
-
-        rows = "".join(row_parts)
-        print(f"Time to render all sets: {perf_counter() - start_time}")
-    finally:
-        conn.close()
-
-    page_html = template.replace("{ROWS}", rows)
-    response = Response(page_html, content_type="text/html")
+    database = Database(DB_CONFIG)
+    html_output = get_all_sets_html(database)
+    response = Response(html_output, content_type="text/html")
     response.headers["Cache-Control"] = "public, max-age=60"
     return response
 
-
 @app.route("/set")
-def legoSet():  # We don't want to call the function `set`, since that would hide the `set` data type.
-    template = open("templates/set.html").read()
-    return Response(template)
+def lego_set_page():  # We don't want to call the function `set`, since that would hide the `set` data type.
+    set_id = request.args.get("id")
+    database = Database(DB_CONFIG)
+    html_output = get_set_html(database, set_id)
+    return Response(html_output, content_type="text/html")
 
 
 @app.route("/api/set")
 def apiSet():
     set_id = request.args.get("id")
-    json_result = get_cached_set_json(set_id)
+    database = Database(DB_CONFIG)
+    json_output = get_cached_set_json(database, set_id)
     return Response(json_result, content_type="application/json")
 
 
