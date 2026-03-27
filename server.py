@@ -4,6 +4,7 @@ from collections import OrderedDict
 import psycopg
 from flask import Flask, Response, request
 from time import perf_counter
+from database import Database
 
 app = Flask(__name__)
 
@@ -17,6 +18,29 @@ DB_CONFIG = {
 
 SET_CACHE = OrderedDict()
 MAX_CACHE_SIZE = 100
+
+def get_all_sets_html(databse):
+    with open("templates/sets.html", encoding="utf-8") as f:
+        template = f.read()
+
+    row_parts = []
+    query = "SELECT id, name FROM leg_set ORDER BY id"
+
+    for row in database.execute_and_fetch_all(query):
+        html_safe_id = html.escape(row[0])
+        html_safe_name = html.escape(row[1])
+        row_parts.append(
+            f'<tr><td><a href="/set?id={html_safe_id}">{html_safe_id}</a></td>'
+            f'<td>{html_safe_name}</td></tr>\n'
+        )
+
+        rows = "".join(row_parts)
+        return template.replace("{ROWS}", rows)
+    
+    def get_set_html(database, set_id):
+        with open("templates/set.html", encoding="utf-8") as f:
+            template = f.read()
+        return template
 
 def get_set_json(set_id):
     conn = psycopg.connect(**DB_CONFIG)
