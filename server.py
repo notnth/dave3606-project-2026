@@ -70,6 +70,25 @@ def get_set_json(database, set_id):
 
     return json.dumps(result, indent=4)
 
+def get_set_binary(database, set_id):
+    query_set = "SELECT id, name, year, category FROM lego_set WHERE id = %s"
+    query_inventory = "SELECT brick_type_id, color_id, count FROM lego_inventory WHERE set_id = %s"
+    
+    set_rows = database.execute_and_fetch_all(query_set, (set_id,))
+    if not set_rows:
+        return b"ERROR: Set not found"
+    
+    set_id, name, year, category = set_rows[0]
+
+    lines = []
+    lines.append(f"SET;{set_id};{name};{year};{category}")
+    
+    inventory_rows = database.execute_and_fetch_all(query_inventory, (set_id,))
+    for brick_type_id, color_id, count in inventory_rows:
+        lines.append(f"BRICK;{brick_type_id};{color_id};{count}")
+    
+    text = "\n".join(lines)
+    return text.encode("utf-8")
 
 def get_cached_set_json(database, set_id):
     if set_id in SET_CACHE:
@@ -101,11 +120,15 @@ def sets():
     meta_charset = '<meta charset="utf-8">' if encoding == "utf-8" else ""
     
     database = Database(DB_CONFIG)
-    html_output = get_all_sets_html(database)
+    html_output = get_all_sets_html(database, meta_charset)
+
+    body = html_output.encode(encoding)
+    compressed_body = gzip.compress(body)
 
     with open("templates/sets.html", encoding = "utf-8") as f:
         template = f.read()
     template = template.replace("{META_CHARSET}", meta_charset)
+    
     row_parts = []
     start_time = perf_counter()
     conn = psycopg.connect(**DB_CONFIG)
@@ -123,9 +146,6 @@ def sets():
     finally:
         conn.close()
     page_html = template.replace("{ROWS}", rows)
-
-    body = page_html.encode(encoding)
-    compressed_body = gzip.compress(body)
 
     response = Response(
         html_output, 
@@ -149,6 +169,15 @@ def apiSet():
     json_output = get_cached_set_json(database, set_id)
     return Response(json_output, content_type="application/json")
 
+@app.route("/api/setfile")
+def api_setfile():
+    set_id = request.args.get("id")
+    if not set_id:
+        return Response("missing id parameter", status = 400)
+    
+    database = Database(DB_CONFIG)
+    binary_output = get_set_binary(database, set_id)
+    return Response(binary_output, content_type = "appication/octet-stream")
 
 if __name__ == "__main__":
     app.run(port=5000, debug=True)
