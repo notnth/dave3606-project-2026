@@ -1,9 +1,7 @@
 import json
 import html
 from collections import OrderedDict
-import psycopg
 from flask import Flask, Response, request
-from time import perf_counter
 from database import Database
 import gzip
 
@@ -20,12 +18,13 @@ DB_CONFIG = {
 SET_CACHE = OrderedDict()
 MAX_CACHE_SIZE = 100
 
-def get_all_sets_html(database, meta_charset):
+def get_all_sets_html(database, meta_charset=""):
     with open("templates/sets.html", encoding="utf-8") as f:
         template = f.read()
 
-    row_parts = []
+    
     query = "SELECT id, name FROM lego_set ORDER BY id"
+    row_parts = []
 
     for row in database.execute_and_fetch_all(query):
         html_safe_id = html.escape(row[0])
@@ -36,7 +35,7 @@ def get_all_sets_html(database, meta_charset):
         )
 
     rows = "".join(row_parts)
-    return template.replace("{META_CHARSET}", meta_charset).replace("{ROWS}}", rows)
+    return template.replace("{META_CHARSET}", meta_charset).replace("{ROWS}", rows)
     
 def get_set_html(database, set_id):
     with open("templates/set.html", encoding="utf-8") as f:
@@ -45,7 +44,9 @@ def get_set_html(database, set_id):
 
 def get_set_json(database, set_id):
     query_set = "SELECT id, name, year, category FROM lego_set WHERE id = %s"
-    query_inventory = "SELECT brick_type_id, color_id, count FROM lego_inventory WHERE set_id = %s"
+    query_inventory = (
+        "SELECT brick_type_id, color_id, count FROM lego_inventory WHERE set_id = %s"
+    )
 
     set_rows = database.execute_and_fetch_all(query_set, (set_id,))
     if not set_rows:
@@ -72,16 +73,18 @@ def get_set_json(database, set_id):
 
 def get_set_binary(database, set_id):
     query_set = "SELECT id, name, year, category FROM lego_set WHERE id = %s"
-    query_inventory = "SELECT brick_type_id, color_id, count FROM lego_inventory WHERE set_id = %s"
-    
+    query_inventory = ( 
+        "SELECT brick_type_id, color_id, count FROM lego_inventory WHERE set_id = %s"
+    )
+
     set_rows = database.execute_and_fetch_all(query_set, (set_id,))
     if not set_rows:
         return b"ERROR: Set not found"
     
     set_id, name, year, category = set_rows[0]
 
-    lines = []
-    lines.append(f"SET;{set_id};{name};{year};{category}")
+    lines = [f"SET;{set_id};{name};{year};{category}"]
+    
     
     inventory_rows = database.execute_and_fetch_all(query_inventory, (set_id,))
     for brick_type_id, color_id, count in inventory_rows:
@@ -96,7 +99,6 @@ def get_cached_set_json(database, set_id):
         return SET_CACHE[set_id]
 
     json_output = get_set_json(database, set_id)
-
     SET_CACHE[set_id] = json_output
     SET_CACHE.move_to_end(set_id)
 
@@ -117,22 +119,25 @@ def sets():
     encoding = request.args.get("encoding", "utf-8")
     if encoding not in ["utf-8", "utf-16"]:
         encoding = "utf-8"
+
     meta_charset = '<meta charset="utf-8">' if encoding == "utf-8" else ""
+
+    database = Database(DB_CONFIG)
     html_output = get_all_sets_html(database, meta_charset)
+
     body = html_output.encode(encoding)
     compressed_body = gzip.compress(body)
-    return Response(compressed_body, content_type =f"text/html; charset={encoding}", headers={"Content-Encoding": "gzip"})
-    
-    # sjekk her?
 
-    Database(DB_CONFIG)
-    html_output = get_all_sets_html(database)
-    response = Response(html_output, content_type="text/html")
+    response = Response(
+        compressed_body,
+        content_type=f"text/html; charset={encoding}",
+    )
+    response.headers["Content-Encoding"] = "gzip"
     response.headers["Cache-Control"] = "public, max-age=60"
     return response
 
 @app.route("/set")
-def lego_set_page():  # We don't want to call the function `set`, since that would hide the `set` data type.
+def lego_set_page():  
     set_id = request.args.get("id")
     database = Database(DB_CONFIG)
     html_output = get_set_html(database, set_id)
@@ -142,6 +147,13 @@ def lego_set_page():  # We don't want to call the function `set`, since that wou
 @app.route("/api/set")
 def apiSet():
     set_id = request.args.get("id")
+    if not set_id:
+        return Response (
+            json.dumps({"error": "missing id parameter"}, indent=4),
+            status=400,
+            content_type="application/json"
+        )
+
     database = Database(DB_CONFIG)
     json_output = get_cached_set_json(database, set_id)
     return Response(json_output, content_type="application/json")
