@@ -5,6 +5,7 @@ import psycopg
 from flask import Flask, Response, request
 from time import perf_counter
 from database import Database
+import gzip
 
 app = Flask(__name__)
 
@@ -94,9 +95,42 @@ def index():
 
 @app.route("/sets")
 def sets():
+    encoding = request.args.get("encoding", "utf-8")
+    if encoding not in ["utf-8", "utf-16"]:
+        encoding = "utf-8"
+    meta_charset = '<meta charset="utf-8">' if encoding == "utf-8" else ""
+    
     database = Database(DB_CONFIG)
     html_output = get_all_sets_html(database)
-    response = Response(html_output, content_type="text/html")
+
+    with open("templates/sets.html", encoding = "utf-8") as f:
+        template = f.read()
+    template = template.replace("{META_CHARSET}", meta_charset)
+    row_parts = []
+    start_time = perf_counter()
+    conn = psycopg.connect(**DB_CONFIG)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select id, name from lego_set order by id")
+            for row in cur.fetchall():
+                html_safe_id = html_escape(row[0])
+                html_safe_name = html.escape(row[1])
+                row_parts.append(f'<tr><td><a href="/set?id={html_safe_id}">{html_safe_id}</a></td>'
+                    f'<td>{html_safe_name}</td></tr>\n'
+                )
+        rows = "".join(row_parts)
+        print(f"Time to render all sets: {perf_counter() - start_time}")
+    finally:
+        conn.close()
+    page_html = template.replace("{ROWS}", rows)
+
+    body = page_html.encode(encoding)
+    compressed_body = gzip.compress(body)
+
+    response = Response(
+        html_output, 
+        content_type="text/html"
+        )
     response.headers["Cache-Control"] = "public, max-age=60"
     return response
 
