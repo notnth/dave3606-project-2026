@@ -122,34 +122,12 @@ def sets():
     body = html_output.encode(encoding)
     compressed_body = gzip.compress(body)
     return Response(compressed_body, content_type =f"text/html; charset={encoding}", headers={"Content-Encoding": "gzip"})
-
-    with open("templates/sets.html", encoding = "utf-8") as f:
-        template = f.read()
-    template = template.replace("{META_CHARSET}", meta_charset)
     
-    row_parts = []
-    start_time = perf_counter()
-    conn = psycopg.connect(**DB_CONFIG)
-    try:
-        with conn.cursor() as cur:
-            cur.execute("select id, name from lego_set order by id")
-            for row in cur.fetchall():
-                html_safe_id = html_escape(row[0])
-                html_safe_name = html.escape(row[1])
-                row_parts.append(f'<tr><td><a href="/set?id={html_safe_id}">{html_safe_id}</a></td>'
-                    f'<td>{html_safe_name}</td></tr>\n'
-                )
-        rows = "".join(row_parts)
-        print(f"Time to render all sets: {perf_counter() - start_time}")
-    finally:
-        conn.close()
-    page_html = template.replace("{ROWS}", rows)
+    # sjekk her?
 
-    database = Database(DB_CONFIG)
-    response = Response(
-        html_output, 
-        content_type="text/html"
-        )
+    Database(DB_CONFIG)
+    html_output = get_all_sets_html(database)
+    response = Response(html_output, content_type="text/html")
     response.headers["Cache-Control"] = "public, max-age=60"
     return response
 
