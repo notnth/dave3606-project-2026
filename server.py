@@ -177,7 +177,7 @@ def api_setfile():
     
     database = Database(DB_CONFIG)
     binary_output = get_set_binary(database, set_id)
-    return Response(binary_output, content_type = "appication/octet-stream")
+    return Response(binary_output, content_type = "application/octet-stream")
 
 if __name__ == "__main__":
     app.run(port=5000, debug=True)
